@@ -175,8 +175,8 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 	}
 
 	totalAmount := invAmount + cashAmount
-	incomeRate := totalAmount / initialAmount
+	incomeRate := (totalAmount - initialAmount) / initialAmount * 100
 
-	fmt.Println("totalAmount:", totalAmount)
-	fmt.Println("incomeRate:", incomeRate*100, "%")
+	fmt.Println("totalAmount:", int(totalAmount))
+	fmt.Println("incomeRate:", incomeRate, "%")
 }

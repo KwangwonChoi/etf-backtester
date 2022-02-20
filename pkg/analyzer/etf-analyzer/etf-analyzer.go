@@ -142,9 +142,16 @@ func (a *EtfBackTester) getDateFromKRData(data string) (time.Time, error) {
 }
 
 func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool) {
+
+	var nextAccumulateDate time.Time
 	initialAmount := float64(config.InitialInvestAmount)
+	ownAmount := initialAmount
 	nextRebalanceDate := config.StartDate.AddDate(0, 0, config.RebalancePeriodDay)
 	today := config.StartDate
+
+	if config.Accumulative {
+		nextAccumulateDate = config.StartDate.AddDate(0, 0, config.AccumulativePeriodDay)
+	}
 
 	invAmount := float64(initialAmount * (config.InvestPercent / 100))
 	cashAmount := float64(initialAmount - invAmount)
@@ -154,6 +161,21 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 			fmt.Println(today.String(), " Amount(inv, cash) ", int64(invAmount), int64(cashAmount))
 		}
 		invAmount = invAmount + (invAmount * (a.DataMap[today].changePercent / 100) * config.LeverageMultiple)
+
+		if config.Accumulative && today == nextAccumulateDate {
+			inv := float64(float64(config.AccumulativeAmount) * (config.InvestPercent / 100))
+			cash := float64(config.AccumulativeAmount) - inv
+			ownAmount += float64(config.AccumulativeAmount)
+
+			invAmount += inv
+			cashAmount += cash
+
+			if printLog {
+				fmt.Println("accumulate cash (inv, cash)", invAmount, cashAmount)
+			}
+
+			nextAccumulateDate = today.AddDate(0, 0, config.AccumulativePeriodDay)
+		}
 
 		if today == nextRebalanceDate {
 			nextRebalanceDate = today.AddDate(0, 0, config.RebalancePeriodDay)
@@ -175,7 +197,7 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 	}
 
 	totalAmount := invAmount + cashAmount
-	incomeRate := (totalAmount - initialAmount) / initialAmount * 100
+	incomeRate := (totalAmount - ownAmount) / ownAmount * 100
 
 	fmt.Println("totalAmount:", int(totalAmount))
 	fmt.Println("incomeRate:", incomeRate, "%")

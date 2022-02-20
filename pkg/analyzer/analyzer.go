@@ -8,10 +8,13 @@ type BackTester interface {
 }
 
 type BackTesterConfig struct {
-	StartDate           time.Time
-	EndDate             time.Time
-	InvestPercent       float64
-	RebalancePeriodDay  int
-	LeverageMultiple    float64
-	InitialInvestAmount int64
+	StartDate             time.Time
+	EndDate               time.Time
+	InvestPercent         float64
+	RebalancePeriodDay    int
+	LeverageMultiple      float64
+	InitialInvestAmount   int64
+	Accumulative          bool
+	AccumulativePeriodDay int
+	AccumulativeAmount    int64
 }

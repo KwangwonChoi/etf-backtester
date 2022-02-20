@@ -51,7 +51,10 @@ to quickly create a Cobra application.`,
 	analyzeCmd.PersistentFlags().IntVar(&info.RebalancePeriodDay, "rebalancePeriod", 365, "365")
 	analyzeCmd.PersistentFlags().Float64Var(&info.LeverageMultiple, "leverage", 1, "3")
 	analyzeCmd.PersistentFlags().BoolVar(&printLog, "printLog", false, "true/false")
+	analyzeCmd.PersistentFlags().BoolVar(&info.Accumulative, "accumulative", false, "true/false")
 	analyzeCmd.PersistentFlags().Int64Var(&info.InitialInvestAmount, "initAmount", 100000000, "100000000")
+	analyzeCmd.PersistentFlags().Int64Var(&info.AccumulativeAmount, "accumulativeAmount", 2000000, "2000000")
+	analyzeCmd.PersistentFlags().IntVar(&info.AccumulativePeriodDay, "accumulativePeriod", 30, "30")
 
 	return analyzeCmd
 }

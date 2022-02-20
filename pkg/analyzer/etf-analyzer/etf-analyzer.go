@@ -149,7 +149,7 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 	invAmount := float64(initialAmount * (config.InvestPercent / 100))
 	cashAmount := float64(initialAmount - invAmount)
 
-	for today != config.EndDate {
+	for {
 		if printLog {
 			fmt.Println(today.String(), " Amount(inv, cash) ", int64(invAmount), int64(cashAmount))
 		}
@@ -168,6 +168,10 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 		}
 
 		today = today.AddDate(0, 0, 1)
+
+		if today == config.EndDate {
+			break
+		}
 	}
 
 	totalAmount := invAmount + cashAmount

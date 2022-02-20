@@ -18,6 +18,8 @@ func NewAnalyzeCmd() *cobra.Command {
 	info := analyzer.BackTesterConfig{}
 	printLog := false
 	fileName := "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv"
+	startDate := ""
+	endDate := ""
 
 	// analyzeCmd represents the analyze command
 	analyzeCmd := &cobra.Command{
@@ -30,14 +32,18 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 		Run: func(cmd *cobra.Command, args []string) {
+			start := GetIntegerListFromStringList(strings.Split(startDate, "-"))
+			end := GetIntegerListFromStringList(strings.Split(endDate, "-"))
+
+			info.StartDate = time.Date(start[0], time.Month(start[1]), start[2], 0, 0, 0, 0, time.UTC)
+			info.EndDate = time.Date(end[0], time.Month(end[1]), end[2], 0, 0, 0, 0, time.UTC)
+
 			backTester := etf_analyzer.NewEtfBackTester(fileName)
 
 			backTester.BackTest(info, printLog)
 		},
 	}
 
-	startDate := ""
-	endDate := ""
 	analyzeCmd.PersistentFlags().StringVar(&fileName, "fileName", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv")
 	analyzeCmd.PersistentFlags().StringVar(&startDate, "startDate", "1985-09-26", "1985-09-26")
 	analyzeCmd.PersistentFlags().StringVar(&endDate, "endDate", "2022-02-18", "2022-02-18")
@@ -46,12 +52,6 @@ to quickly create a Cobra application.`,
 	analyzeCmd.PersistentFlags().Float64Var(&info.LeverageMultiple, "leverage", 1, "3")
 	analyzeCmd.PersistentFlags().BoolVar(&printLog, "printLog", false, "true/false")
 	analyzeCmd.PersistentFlags().Int64Var(&info.InitialInvestAmount, "initAmount", 100000000, "100000000")
-
-	start := GetIntegerListFromStringList(strings.Split(startDate, "-"))
-	end := GetIntegerListFromStringList(strings.Split(endDate, "-"))
-
-	info.StartDate = time.Date(start[0], time.Month(start[1]), start[2], 0, 0, 0, 0, time.UTC)
-	info.EndDate = time.Date(end[0], time.Month(end[1]), end[2], 0, 0, 0, 0, time.UTC)
 
 	return analyzeCmd
 }

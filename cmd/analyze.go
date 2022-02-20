@@ -44,7 +44,7 @@ to quickly create a Cobra application.`,
 		},
 	}
 
-	analyzeCmd.PersistentFlags().StringVar(&fileName, "fileName", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv")
+	analyzeCmd.PersistentFlags().StringVar(&fileName, "fileName", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/data/nasdaq100.csv", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv")
 	analyzeCmd.PersistentFlags().StringVar(&startDate, "startDate", "1985-09-26", "1985-09-26")
 	analyzeCmd.PersistentFlags().StringVar(&endDate, "endDate", "2022-02-18", "2022-02-18")
 	analyzeCmd.PersistentFlags().Float64Var(&info.InvestPercent, "investPercent", 50, "50")

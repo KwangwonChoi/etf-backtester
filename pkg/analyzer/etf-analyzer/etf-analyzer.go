@@ -157,9 +157,6 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 	cashAmount := float64(initialAmount - invAmount)
 
 	for {
-		if printLog {
-			fmt.Println(today.String(), " Amount(inv, cash) ", int64(invAmount), int64(cashAmount))
-		}
 		invAmount = invAmount + (invAmount * (a.DataMap[today].changePercent / 100) * config.LeverageMultiple)
 
 		if config.Accumulative && today == nextAccumulateDate {
@@ -171,7 +168,7 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 			cashAmount += cash
 
 			if printLog {
-				fmt.Println("accumulate cash (inv, cash)", invAmount, cashAmount)
+				fmt.Println("accumulate cash :", config.AccumulativeAmount, "(inv, cash)", invAmount, cashAmount)
 			}
 
 			nextAccumulateDate = today.AddDate(0, 0, config.AccumulativePeriodDay)
@@ -180,16 +177,20 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 		if today == nextRebalanceDate {
 			nextRebalanceDate = today.AddDate(0, 0, config.RebalancePeriodDay)
 
-			if printLog {
-				fmt.Println("rebalance (inv, cash)", invAmount, cashAmount)
-			}
-
 			totalAmount := invAmount + cashAmount
 			invAmount = totalAmount * (config.InvestPercent / 100)
 			cashAmount = totalAmount - invAmount
+
+			if printLog {
+				fmt.Println("rebalance (inv, cash)", invAmount, cashAmount)
+			}
 		}
 
 		today = today.AddDate(0, 0, 1)
+
+		if printLog {
+			fmt.Println(strings.Split(today.String(), " ")[0], " Amount(inv, cash) ", int64(invAmount), int64(cashAmount))
+		}
 
 		if today == config.EndDate {
 			break

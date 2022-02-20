@@ -24,5 +24,5 @@ func TestGetData(t *testing.T) {
 		RebalancePeriodDay:  rebalancePeriod,
 		LeverageMultiple:    leverate,
 		InitialInvestAmount: initialAmount,
-	})
+	}, false)
 }

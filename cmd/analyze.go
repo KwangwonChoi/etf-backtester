@@ -17,7 +17,7 @@ func NewAnalyzeCmd() *cobra.Command {
 
 	info := analyzer.BackTesterConfig{}
 	printLog := false
-	fileName := "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv"
+	files := ""
 	startDate := ""
 	endDate := ""
 
@@ -38,18 +38,18 @@ to quickly create a Cobra application.`,
 			info.StartDate = time.Date(start[0], time.Month(start[1]), start[2], 0, 0, 0, 0, time.UTC)
 			info.EndDate = time.Date(end[0], time.Month(end[1]), end[2], 0, 0, 0, 0, time.UTC)
 
-			backTester := etf_analyzer.NewEtfBackTester(fileName)
+			backTester := etf_analyzer.NewEtfBackTester(files)
 
 			backTester.BackTest(info, printLog)
 		},
 	}
 
-	analyzeCmd.PersistentFlags().StringVar(&fileName, "fileName", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/data/nasdaq100.csv", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv")
+	analyzeCmd.PersistentFlags().StringVar(&files, "fileName", "/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/data/nasdaq100.csv", "{\"vt\" : \"/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/data/nasdaq100.csv\"}")
 	analyzeCmd.PersistentFlags().StringVar(&startDate, "startDate", "1985-09-26", "1985-09-26")
 	analyzeCmd.PersistentFlags().StringVar(&endDate, "endDate", "2022-02-18", "2022-02-18")
-	analyzeCmd.PersistentFlags().Float64Var(&info.InvestPercent, "investPercent", 50, "50")
+	analyzeCmd.PersistentFlags().StringVar(&info.InvestPercent, "investPercent", "", "{\"vt\" : 50, \"qqq\": 30, \"tlt\": 20}")
 	analyzeCmd.PersistentFlags().IntVar(&info.RebalancePeriodDay, "rebalancePeriod", 365, "365")
-	analyzeCmd.PersistentFlags().Float64Var(&info.LeverageMultiple, "leverage", 1, "3")
+	analyzeCmd.PersistentFlags().StringVar(&info.LeverageMultiple, "leverage", "", "{\"vt\" : 3, \"qqq\": 3, \"tlt\": 2}")
 	analyzeCmd.PersistentFlags().BoolVar(&printLog, "printLog", false, "true/false")
 	analyzeCmd.PersistentFlags().BoolVar(&info.Accumulative, "accumulative", false, "true/false")
 	analyzeCmd.PersistentFlags().Int64Var(&info.InitialInvestAmount, "initAmount", 100000000, "100000000")

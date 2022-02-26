@@ -3,6 +3,7 @@ package etf_analyzer
 import (
 	"bufio"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"github.com/KwangwonChoi/etf-backtester/pkg/analyzer"
 	"github.com/pkg/errors"
@@ -13,23 +14,34 @@ import (
 	"time"
 )
 
-func NewEtfBackTester(filename string) EtfBackTester {
+func NewEtfBackTester(files string) EtfBackTester {
 
-	dataMap := make(map[time.Time]EtfData)
+	dataMap := make(map[string]map[time.Time]EtfData)
 	logger := logrus.New()
+	aliases := make([]string, 0)
+
+	fileMap := make(map[string]string)
+	json.Unmarshal([]byte(files), &fileMap)
 
 	backTester := EtfBackTester{
-		dataMap,
-		logger,
+		DataMap: dataMap,
+		Logger: logger,
 	}
 
-	backTester.loadData(filename)
+	for key, value := range fileMap {
+		backTester.DataMap[key] = make(map[time.Time]EtfData)
+		backTester.loadData(key, value)
+		aliases = append(aliases, key)
+	}
+
+	backTester.aliases = aliases
 
 	return backTester
 }
 
 type EtfBackTester struct {
-	DataMap map[time.Time]EtfData
+	DataMap map[string]map[time.Time]EtfData
+	aliases []string
 	*logrus.Logger
 }
 
@@ -53,7 +65,7 @@ const (
 	changePercentColumn = 6
 )
 
-func (a *EtfBackTester) loadData(filename string) {
+func (a *EtfBackTester) loadData(alias, filename string) {
 	file, err := os.Open(filename)
 
 	if err != nil {
@@ -108,7 +120,7 @@ func (a *EtfBackTester) loadData(filename string) {
 			panic(errors.Wrap(err, "failed parse endPrice value"))
 		}
 
-		a.DataMap[date] = EtfData{
+		a.DataMap[alias][date] = EtfData{
 			date:          date,
 			endPrice:      endPrice,
 			startPrice:    startPrice,
@@ -146,60 +158,150 @@ func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool
 	var nextAccumulateDate time.Time
 	initialAmount := float64(config.InitialInvestAmount)
 	ownAmount := initialAmount
+	investPercentMap := getInvestPercentMap(config.InvestPercent)
+	leverageMap := getLeverageMap(config.LeverageMultiple, a.aliases)
 	nextRebalanceDate := config.StartDate.AddDate(0, 0, config.RebalancePeriodDay)
 	today := config.StartDate
+	tomorrow := today.AddDate(0,0,1)
+	resultMap := make(map[string]map[time.Time]float64)
 
 	if config.Accumulative {
 		nextAccumulateDate = config.StartDate.AddDate(0, 0, config.AccumulativePeriodDay)
 	}
 
-	invAmount := float64(initialAmount * (config.InvestPercent / 100))
-	cashAmount := float64(initialAmount - invAmount)
+	for _, v := range a.aliases {
+		resultMap[v] = make(map[time.Time]float64)
+		resultMap[v][today] = initialAmount * (investPercentMap[v]/100)
+	}
+
+	if printLog {
+		fmt.Printf("%s || ", today.String())
+		for _, v := range a.aliases {
+			fmt.Printf("%s : %f |", v, resultMap[v][today])
+		}
+		fmt.Println()
+	}
 
 	for {
-		invAmount = invAmount + (invAmount * (a.DataMap[today].changePercent / 100) * config.LeverageMultiple)
-
-		if config.Accumulative && today == nextAccumulateDate {
-			inv := float64(float64(config.AccumulativeAmount) * (config.InvestPercent / 100))
-			cash := float64(config.AccumulativeAmount) - inv
-			ownAmount += float64(config.AccumulativeAmount)
-
-			invAmount += inv
-			cashAmount += cash
-
-			if printLog {
-				fmt.Println("accumulate cash :", config.AccumulativeAmount, "(inv, cash)", invAmount, cashAmount)
-			}
-
-			nextAccumulateDate = today.AddDate(0, 0, config.AccumulativePeriodDay)
+		for _, v := range a.aliases {
+			resultMap[v][tomorrow] = resultMap[v][today] * (1 + (a.DataMap[v][today].changePercent/100) * leverageMap[v])
 		}
 
-		if today == nextRebalanceDate {
-			nextRebalanceDate = today.AddDate(0, 0, config.RebalancePeriodDay)
+		if printLog {
+			fmt.Printf("%s || ", tomorrow.String())
+			for _, v := range a.aliases {
+				fmt.Printf("%s : %f |", v, resultMap[v][tomorrow])
+			}
+			fmt.Println()
+		}
 
-			totalAmount := invAmount + cashAmount
-			invAmount = totalAmount * (config.InvestPercent / 100)
-			cashAmount = totalAmount - invAmount
+		if config.Accumulative && tomorrow == nextAccumulateDate {
+
+			ownAmount += float64(config.AccumulativeAmount)
 
 			if printLog {
-				fmt.Println("rebalance (inv, cash)", invAmount, cashAmount)
+				fmt.Println("accumulate cash :", config.AccumulativeAmount)
 			}
+
+			for _, v := range a.aliases {
+				resultMap[v][tomorrow] += float64(config.AccumulativeAmount) * (investPercentMap[v]/100)
+			}
+
+			if printLog {
+				fmt.Printf("%s :: ", tomorrow.String())
+				for _, v := range a.aliases {
+					fmt.Printf("%s : %f |", v, resultMap[v][tomorrow])
+				}
+				fmt.Println()
+			}
+
+			nextAccumulateDate = tomorrow.AddDate(0, 0, config.AccumulativePeriodDay)
+		}
+
+		if tomorrow == nextRebalanceDate {
+
+			totalAmount := float64(0)
+
+			for _, v := range a.aliases {
+				totalAmount += resultMap[v][tomorrow]
+			}
+
+			if printLog {
+				fmt.Println("rebalance (inv, cash)")
+			}
+
+			for _, v := range a.aliases {
+				resultMap[v][tomorrow] = totalAmount * (investPercentMap[v]/100)
+			}
+
+			if printLog {
+				fmt.Printf("%s :: ", tomorrow.String())
+				for _, v := range a.aliases {
+					fmt.Printf("%s : %f |", v, resultMap[v][tomorrow])
+				}
+				fmt.Println()
+			}
+
+			nextRebalanceDate = today.AddDate(0, 0, config.RebalancePeriodDay)
 		}
 
 		today = today.AddDate(0, 0, 1)
+		tomorrow = tomorrow.AddDate(0, 0, 1)
 
-		if printLog {
-			fmt.Println(strings.Split(today.String(), " ")[0], " Amount(inv, cash) ", int64(invAmount), int64(cashAmount))
-		}
-
-		if today == config.EndDate {
+		if tomorrow == config.EndDate {
 			break
 		}
 	}
 
-	totalAmount := invAmount + cashAmount
+	totalAmount := float64(0)
+
+	for _, v := range a.aliases {
+		totalAmount += resultMap[v][today]
+	}
+
 	incomeRate := (totalAmount - ownAmount) / ownAmount * 100
 
 	fmt.Println("totalAmount:", int(totalAmount))
+	fmt.Println("originAmount:", int(ownAmount))
 	fmt.Println("incomeRate:", incomeRate, "%")
+}
+
+func getInvestPercentMap( jsonString string ) map[string]float64 {
+	res := getFloatMap(jsonString)
+
+	total := float64(0)
+
+	for _, v := range res {
+		total += v
+	}
+
+	if total != 100 {
+		panic("percent total should be 100")
+	}
+
+	return res
+}
+
+func getLeverageMap( jsonString string, aliases []string ) map[string]float64 {
+	res := getFloatMap(jsonString)
+
+	for _, v := range aliases {
+		if res[v] == 0 {
+			res[v] = 1
+		}
+	}
+
+	return res
+}
+
+func getFloatMap( jsonString string ) map[string]float64 {
+	investPercentMap := make(map[string]float64)
+
+	err := json.Unmarshal([]byte(jsonString), &investPercentMap)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return investPercentMap
 }

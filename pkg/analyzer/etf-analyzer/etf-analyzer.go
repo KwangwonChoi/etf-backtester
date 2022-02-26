@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-func NewEtfBackTester(filename string) EtfBackTester {
+func NewEtfBackTester(filename []string) EtfBackTester {
 
-	dataMap := make(map[time.Time]EtfData)
+	dataMap := make(map[string]map[time.Time]EtfData)
 	logger := logrus.New()
 
 	backTester := EtfBackTester{
@@ -23,14 +23,20 @@ func NewEtfBackTester(filename string) EtfBackTester {
 		logger,
 	}
 
-	backTester.loadData(filename)
+	backTester.loadDatas(filename)
 
 	return backTester
 }
 
 type EtfBackTester struct {
-	DataMap map[time.Time]EtfData
+	DataMap *map[string]map[time.Time]EtfData
 	*logrus.Logger
+}
+
+type Etf struct {
+	name string
+	filename string
+	data map[time.Time]EtfData
 }
 
 type EtfData struct {
@@ -53,8 +59,21 @@ const (
 	changePercentColumn = 6
 )
 
-func (a *EtfBackTester) loadData(filename string) {
+func (a *EtfBackTester) loadDatas(filenames []string) {
+
+	datas := make(map[string]map[time.Time]EtfData)
+
+	for _, v := range filenames {
+	fileNameList := strings.Split(v, "/")
+		datas[fileNameList[len(fileNameList)]] = a.loadData(v)
+	}
+
+	a.DataMap = datas
+}
+
+func (a *EtfBackTester) loadData(filename string) map[time.Time]EtfData {
 	file, err := os.Open(filename)
+	returnValue := make(map[time.Time]EtfData)
 
 	if err != nil {
 		panic(errors.Wrap(err, fmt.Sprintf("failed to load file %s", filename)))
@@ -108,7 +127,7 @@ func (a *EtfBackTester) loadData(filename string) {
 			panic(errors.Wrap(err, "failed parse endPrice value"))
 		}
 
-		a.DataMap[date] = EtfData{
+		returnValue[date] = EtfData{
 			date:          date,
 			endPrice:      endPrice,
 			startPrice:    startPrice,
@@ -117,6 +136,8 @@ func (a *EtfBackTester) loadData(filename string) {
 			changePercent: changePercent,
 		}
 	}
+
+	return returnValue
 }
 
 func (a *EtfBackTester) getDateFromKRData(data string) (time.Time, error) {

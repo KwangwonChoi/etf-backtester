@@ -1,28 +1,37 @@
 package etf_analyzer
 
 import (
-	"github.com/KwangwonChoi/etf-backtester/pkg/analyzer"
 	"testing"
-	"time"
 )
 
 func TestGetData(t *testing.T) {
-	backTester := NewEtfBackTester("/Users/user/Desktop/LIGHTSRC/finance/etf-backtester/nasdaq100.csv")
 
-	startDate := time.Date(1999, 04, 27, 0, 0, 0, 0, time.UTC)
-	//endDate := time.Date(1999, 04, 28, 0, 0, 0, 0, time.UTC)
-	endDate := time.Date(2022, 02, 01, 0, 0, 0, 0, time.UTC)
-	investPercent := float64(50)
-	rebalancePeriod := int(365)
-	leverate := float64(3)
-	initialAmount := int64(100)
+	jsonData := `
+{
+  "initialAmount": 10000,
+  "start": "1990-01-01",
+  "end": "2001-01-01",
+  "rebalancePeriod": 365,
+  "accumulative": true,
+  "accumulateAmount": 100,
+  "accumulatePeriod": 30,
+  "etf": [{
+    "name": "vt",
+    "alias": "vt",
+    "dataFile": "./data/vt.csv",
+    "leverage": 1,
+    "investPercent": 50
+  }, {
+    "name": "tqqq",
+    "alias": "vt",
+    "dataFile": "./data/nasdaq100.csv",
+    "leverage": 3,
+    "investPercent": 50
+  }]
+}
+`
 
-	backTester.BackTest(analyzer.BackTesterConfig{
-		StartDate:           startDate,
-		EndDate:             endDate,
-		InvestPercent:       investPercent,
-		RebalancePeriodDay:  rebalancePeriod,
-		LeverageMultiple:    leverate,
-		InitialInvestAmount: initialAmount,
-	}, false)
+	backTester := NewEtfBackTester([]byte(jsonData))
+	backTester.BackTest(true)
+
 }

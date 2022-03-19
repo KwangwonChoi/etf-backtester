@@ -1,307 +1,225 @@
 package etf_analyzer
 
 import (
-	"bufio"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/KwangwonChoi/etf-backtester/pkg/analyzer"
+	"github.com/KwangwonChoi/etf-backtester/pkg/etf"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-func NewEtfBackTester(files string) EtfBackTester {
+func NewEtfBackTester(bytes []byte) EtfBackTester {
 
-	dataMap := make(map[string]map[time.Time]EtfData)
-	logger := logrus.New()
-	aliases := make([]string, 0)
+	metadata := getBackTesterMetadataList(bytes)
 
-	fileMap := make(map[string]string)
-	json.Unmarshal([]byte(files), &fileMap)
+	start := GetIntegerListFromStringList(strings.Split(metadata.Start, "-"))
+	end := GetIntegerListFromStringList(strings.Split(metadata.End, "-"))
 
-	backTester := EtfBackTester{
-		DataMap: dataMap,
-		Logger: logger,
+	metadata.startDate = time.Date(start[0], time.Month(start[1]), start[2], 0, 0, 0, 0, time.UTC)
+	metadata.endDate = time.Date(end[0], time.Month(end[1]), end[2], 0, 0, 0, 0, time.UTC)
+
+	dataMap := make(map[string]etf.Info)
+
+	for _, v := range metadata.Etf {
+		dataMap[v.Name] = etf.Info{
+			ETF: etf.ETF{
+				Name:      v.Name,
+				DailyData: etf.LoadData(v.DataFile),
+			},
+			MetaData: etf.MetaData{
+				Leverage:      v.Leverage,
+				InvestPercent: v.InvestPercent,
+			},
+			InvestAmount: make(map[time.Time]float64),
+		}
 	}
 
-	for key, value := range fileMap {
-		backTester.DataMap[key] = make(map[time.Time]EtfData)
-		backTester.loadData(key, value)
-		aliases = append(aliases, key)
+	return EtfBackTester{
+		BackTestMetadata: metadata,
+		DataMap:          dataMap,
+		Logger:           logrus.New(),
 	}
-
-	backTester.aliases = aliases
-
-	return backTester
 }
 
 type EtfBackTester struct {
-	DataMap map[string]map[time.Time]EtfData
-	aliases []string
+	BackTestMetadata
+	DataMap map[string]etf.Info
 	*logrus.Logger
 }
 
-type EtfData struct {
-	date          time.Time
-	endPrice      float64
-	startPrice    float64
-	highPrice     float64
-	lowPrice      float64
-	tradingVolume string // 거래량
-	changePercent float64
+type BackTestMetadata struct {
+	InitialAmount  float64 `json:"initialAmount,omitempty"`
+	PurchaseAmount float64 `json:"purchaseAmount,omitempty"`
+	Start          string  `json:"start,omitempty"`
+	End              string  `json:"end,omitempty"`
+	startDate        time.Time
+	endDate          time.Time
+	RebalancePeriod  int                  `json:"rebalancePeriod,omitempty"`
+	Accumulative     bool                 `json:"accumulative,omitempty"`
+	AccumulateAmount float64              `json:"accumulateAmount,omitempty"`
+	AccumulatePeriod int                  `json:"accumulatePeriod,omitempty"`
+	Etf              []IndivisualMetadata `json:"etf,omitempty"`
 }
 
-const (
-	dateColumn          = 0
-	endPriceColumn      = 1
-	startPriceColumn    = 2
-	highPriceColumn     = 3
-	lowPriceColumn      = 4
-	tradingVolumeColumn = 5
-	changePercentColumn = 6
-)
-
-func (a *EtfBackTester) loadData(alias, filename string) {
-	file, err := os.Open(filename)
-
-	if err != nil {
-		panic(errors.Wrap(err, fmt.Sprintf("failed to load file %s", filename)))
-	}
-
-	rdr := csv.NewReader(bufio.NewReader(file))
-	rdr.LazyQuotes = true
-
-	rows, err := rdr.ReadAll()
-
-	if err != nil {
-		panic(errors.Wrap(err, "failed to create new reader"))
-	}
-
-	for _, row := range rows {
-		date, err := a.getDateFromKRData(row[dateColumn])
-
-		if err != nil {
-			panic(errors.Wrap(err, "failed to get data from date format"))
-		}
-
-		textReplacer := strings.NewReplacer(",", "", "%", "")
-
-		endPrice, err := strconv.ParseFloat(textReplacer.Replace(row[endPriceColumn]), 64)
-
-		if err != nil {
-			panic(errors.Wrap(err, "failed parse endPrice value"))
-		}
-
-		startPrice, err := strconv.ParseFloat(textReplacer.Replace(row[startPriceColumn]), 64)
-
-		if err != nil {
-			panic(errors.Wrap(err, "failed parse endPrice value"))
-		}
-
-		highPrice, err := strconv.ParseFloat(textReplacer.Replace(row[highPriceColumn]), 64)
-
-		if err != nil {
-			panic(errors.Wrap(err, "failed parse endPrice value"))
-		}
-
-		lowPrice, err := strconv.ParseFloat(textReplacer.Replace(row[lowPriceColumn]), 64)
-
-		if err != nil {
-			panic(errors.Wrap(err, "failed parse endPrice value"))
-		}
-
-		changePercent, err := strconv.ParseFloat(textReplacer.Replace(row[changePercentColumn]), 64)
-
-		if err != nil {
-			panic(errors.Wrap(err, "failed parse endPrice value"))
-		}
-
-		a.DataMap[alias][date] = EtfData{
-			date:          date,
-			endPrice:      endPrice,
-			startPrice:    startPrice,
-			highPrice:     highPrice,
-			lowPrice:      lowPrice,
-			changePercent: changePercent,
-		}
-	}
+type IndivisualMetadata struct {
+	Name          string  `json:"name,omitempty"`
+	Alias         string  `json:"alias,omitempty"`
+	DataFile      string  `json:"dataFile,omitempty"`
+	Leverage      float64 `json:"leverage,omitempty"`
+	InvestPercent float64 `json:"investPercent,omitempty"`
 }
 
-func (a *EtfBackTester) getDateFromKRData(data string) (time.Time, error) {
-
-	a.Logger.Debugln("dateData: ", data)
-	replacer := strings.NewReplacer("\"", "", " ", "", "\ufeff", "")
-
-	yearStrList := strings.Split(data, "년")
-	monthStrList := strings.Split(yearStrList[1], "월")
-	dayStrList := strings.Split(monthStrList[1], "일")
-
-	yearStr := replacer.Replace(yearStrList[0])
-	monthStr := replacer.Replace(monthStrList[0])
-	dayStr := replacer.Replace(dayStrList[0])
-
-	year, _ := strconv.ParseInt(yearStr, 10, 64)
-	month, _ := strconv.ParseInt(monthStr, 10, 64)
-	day, _ := strconv.ParseInt(dayStr, 10, 64)
-
-	dateStr := time.Date(int(year), time.Month(month), int(day), 0, 0, 0, 0, time.UTC)
-
-	return dateStr, nil
-}
-
-func (a *EtfBackTester) BackTest(config analyzer.BackTesterConfig, printLog bool) {
+func (a *EtfBackTester) BackTest(printLog bool) {
 
 	var nextAccumulateDate time.Time
-	initialAmount := float64(config.InitialInvestAmount)
-	ownAmount := initialAmount
-	investPercentMap := getInvestPercentMap(config.InvestPercent)
-	leverageMap := getLeverageMap(config.LeverageMultiple, a.aliases)
-	nextRebalanceDate := config.StartDate.AddDate(0, 0, config.RebalancePeriodDay)
-	today := config.StartDate
-	tomorrow := today.AddDate(0,0,1)
-	resultMap := make(map[string]map[time.Time]float64)
 
-	if config.Accumulative {
-		nextAccumulateDate = config.StartDate.AddDate(0, 0, config.AccumulativePeriodDay)
+	initialAmount := a.InitialAmount
+	purchaseAmount := a.InitialAmount
+
+	startDate := a.startDate
+	endDate := a.endDate
+
+	rebalancePeriod := a.RebalancePeriod
+
+	accumulative := a.Accumulative
+	accumulateAmount := a.AccumulateAmount
+	accumulatePeriod := a.AccumulatePeriod
+
+	today := startDate
+	nextRebalancedDate := today.AddDate(0, 0, rebalancePeriod)
+
+	investData := a.DataMap
+
+	if accumulative {
+		nextAccumulateDate = today.AddDate(0, 0, accumulatePeriod)
 	}
 
-	for _, v := range a.aliases {
-		resultMap[v] = make(map[time.Time]float64)
-		resultMap[v][today] = initialAmount * (investPercentMap[v]/100)
+	// initialize by invest percent
+	for _, v := range investData {
+		v.InvestAmount[today] = getAmountByPercent(initialAmount, v.InvestPercent)
 	}
 
-	if printLog {
-		fmt.Printf("%s || ", today.String())
-		for _, v := range a.aliases {
-			fmt.Printf("%s : %f |", v, resultMap[v][today])
-		}
-		fmt.Println()
-	}
+	yesterday := today
+	today = today.AddDate(0, 0, 1)
 
 	for {
-		for _, v := range a.aliases {
-			resultMap[v][tomorrow] = resultMap[v][today] * (1 + (a.DataMap[v][today].changePercent/100) * leverageMap[v])
-		}
-
-		if printLog {
-			fmt.Printf("%s || ", tomorrow.String())
-			for _, v := range a.aliases {
-				fmt.Printf("%s : %f |", v, resultMap[v][tomorrow])
-			}
-			fmt.Println()
-		}
-
-		if config.Accumulative && tomorrow == nextAccumulateDate {
-
-			ownAmount += float64(config.AccumulativeAmount)
-
-			if printLog {
-				fmt.Println("accumulate cash :", config.AccumulativeAmount)
-			}
-
-			for _, v := range a.aliases {
-				resultMap[v][tomorrow] += float64(config.AccumulativeAmount) * (investPercentMap[v]/100)
-			}
-
-			if printLog {
-				fmt.Printf("%s :: ", tomorrow.String())
-				for _, v := range a.aliases {
-					fmt.Printf("%s : %f |", v, resultMap[v][tomorrow])
-				}
-				fmt.Println()
-			}
-
-			nextAccumulateDate = tomorrow.AddDate(0, 0, config.AccumulativePeriodDay)
-		}
-
-		if tomorrow == nextRebalanceDate {
-
-			totalAmount := float64(0)
-
-			for _, v := range a.aliases {
-				totalAmount += resultMap[v][tomorrow]
-			}
-
-			if printLog {
-				fmt.Println("rebalance (inv, cash)")
-			}
-
-			for _, v := range a.aliases {
-				resultMap[v][tomorrow] = totalAmount * (investPercentMap[v]/100)
-			}
-
-			if printLog {
-				fmt.Printf("%s :: ", tomorrow.String())
-				for _, v := range a.aliases {
-					fmt.Printf("%s : %f |", v, resultMap[v][tomorrow])
-				}
-				fmt.Println()
-			}
-
-			nextRebalanceDate = today.AddDate(0, 0, config.RebalancePeriodDay)
-		}
-
-		today = today.AddDate(0, 0, 1)
-		tomorrow = tomorrow.AddDate(0, 0, 1)
-
-		if tomorrow == config.EndDate {
+		if today == endDate {
 			break
+		}
+
+		// 변동 적용
+		for _, v := range investData {
+			v.InvestAmount[today] = applyDailyVariation(v.InvestAmount[yesterday], v.DailyData[today].ChangePercent, v.Leverage)
+		}
+
+		// 적립식 투자
+		if accumulative && today == nextAccumulateDate {
+			for _, v := range investData {
+				v.InvestAmount[today] += getAmountByPercent(accumulateAmount, v.InvestPercent)
+				v.DailyData[today].SetAccumulativeDate(true)
+			}
+
+			purchaseAmount += accumulateAmount
+			nextAccumulateDate = today.AddDate(0, 0, accumulatePeriod)
+		}
+
+		// rebalance
+		if today == nextRebalancedDate {
+			var totalAmount float64
+			for _, v := range investData {
+				totalAmount += v.InvestAmount[today]
+				v.DailyData[today].SetRebalancingDate(true)
+			}
+
+			for _, v := range investData {
+				v.InvestAmount[today] = getAmountByPercent(totalAmount, v.InvestPercent)
+			}
+			nextRebalancedDate = today.AddDate(0, 0, rebalancePeriod)
+		}
+
+		yesterday = today
+		today = today.AddDate(0, 0, 1)
+	}
+
+	a.PurchaseAmount = purchaseAmount
+	a.printResult(printLog)
+}
+
+func (a *EtfBackTester) printResult(printLog bool) {
+
+	today := a.startDate
+	endDate := a.endDate
+
+	if printLog {
+		for {
+			if today == endDate {
+				break
+			}
+
+			fmt.Println(today)
+			for k, v := range a.DataMap {
+
+				if v.DailyData[today].IsRebalancingDate {
+					fmt.Println("Rebalancing...")
+				}
+
+				if v.DailyData[today].IsAccumulativeDate {
+					fmt.Println("Accumulating...")
+				}
+
+				fmt.Print(k + ":" + strconv.FormatFloat(v.InvestAmount[today], 'f', 2, 64) + "|")
+			}
 		}
 	}
 
 	totalAmount := float64(0)
-
-	for _, v := range a.aliases {
-		totalAmount += resultMap[v][today]
+	for _, v := range a.DataMap {
+		totalAmount += v.InvestAmount[endDate]
 	}
 
-	incomeRate := (totalAmount - ownAmount) / ownAmount * 100
+	totalReturnPercent := (totalAmount/a.PurchaseAmount)*100 - 100
 
-	fmt.Println("totalAmount:", int(totalAmount))
-	fmt.Println("originAmount:", int(ownAmount))
-	fmt.Println("incomeRate:", incomeRate, "%")
+	fmt.Println("totalAmount: " + strconv.FormatFloat(totalAmount, 'f', 2, 64))
+	fmt.Println("totalReturnPercent: " + strconv.FormatFloat(totalReturnPercent, 'f', 2, 64) + "%")
 }
 
-func getInvestPercentMap( jsonString string ) map[string]float64 {
-	res := getFloatMap(jsonString)
-
-	total := float64(0)
-
-	for _, v := range res {
-		total += v
-	}
-
-	if total != 100 {
-		panic("percent total should be 100")
-	}
-
-	return res
+func applyDailyVariation(amount, percent, leverage float64) float64 {
+	amount += getAmountByPercent(amount, percent*leverage)
+	return amount
 }
 
-func getLeverageMap( jsonString string, aliases []string ) map[string]float64 {
-	res := getFloatMap(jsonString)
-
-	for _, v := range aliases {
-		if res[v] == 0 {
-			res[v] = 1
-		}
-	}
-
-	return res
+func getAmountByPercent(amount, percent float64) float64 {
+	return amount * percent / 100
 }
 
-func getFloatMap( jsonString string ) map[string]float64 {
-	investPercentMap := make(map[string]float64)
+func getBackTesterMetadataList(b []byte) BackTestMetadata {
+	var metadataList BackTestMetadata
 
-	err := json.Unmarshal([]byte(jsonString), &investPercentMap)
+	err := json.Unmarshal(b, &metadataList)
 
 	if err != nil {
-		panic(err)
+		panic(errors.Wrap(err, fmt.Sprintf("failed to unmarshal")))
 	}
 
-	return investPercentMap
+	return metadataList
+}
+
+func GetIntegerListFromStringList(num []string) []int {
+
+	returnValue := make([]int, 3)
+
+	for i, v := range num {
+		convInt, err := strconv.ParseInt(v, 10, 64)
+
+		if err != nil {
+			panic(err)
+		}
+
+		returnValue[i] = int(convInt)
+	}
+
+	return returnValue
 }

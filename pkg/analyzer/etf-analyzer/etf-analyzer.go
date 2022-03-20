@@ -51,9 +51,9 @@ type EtfBackTester struct {
 }
 
 type BackTestMetadata struct {
-	InitialAmount  float64 `json:"initialAmount,omitempty"`
-	PurchaseAmount float64 `json:"purchaseAmount,omitempty"`
-	Start          string  `json:"start,omitempty"`
+	InitialAmount    float64 `json:"initialAmount,omitempty"`
+	PurchaseAmount   float64 `json:"purchaseAmount,omitempty"`
+	Start            string  `json:"start,omitempty"`
 	End              string  `json:"end,omitempty"`
 	startDate        time.Time
 	endDate          time.Time
@@ -75,6 +75,9 @@ type IndivisualMetadata struct {
 func (a *EtfBackTester) BackTest(printLog bool) {
 
 	var nextAccumulateDate time.Time
+
+	accumulateDateSet := make(map[time.Time]bool)
+	rebalanceDateSet := make(map[time.Time]bool)
 
 	initialAmount := a.InitialAmount
 	purchaseAmount := a.InitialAmount
@@ -106,7 +109,7 @@ func (a *EtfBackTester) BackTest(printLog bool) {
 	today = today.AddDate(0, 0, 1)
 
 	for {
-		if today == endDate {
+		if today.After(endDate) {
 			break
 		}
 
@@ -119,9 +122,9 @@ func (a *EtfBackTester) BackTest(printLog bool) {
 		if accumulative && today == nextAccumulateDate {
 			for _, v := range investData {
 				v.InvestAmount[today] += getAmountByPercent(accumulateAmount, v.InvestPercent)
-				v.DailyData[today].SetAccumulativeDate(true)
 			}
 
+			accumulateDateSet[today] = true
 			purchaseAmount += accumulateAmount
 			nextAccumulateDate = today.AddDate(0, 0, accumulatePeriod)
 		}
@@ -131,12 +134,14 @@ func (a *EtfBackTester) BackTest(printLog bool) {
 			var totalAmount float64
 			for _, v := range investData {
 				totalAmount += v.InvestAmount[today]
-				v.DailyData[today].SetRebalancingDate(true)
 			}
 
 			for _, v := range investData {
-				v.InvestAmount[today] = getAmountByPercent(totalAmount, v.InvestPercent)
+				newAmount := getAmountByPercent(totalAmount, v.InvestPercent)
+				v.InvestAmount[today] = newAmount
 			}
+
+			rebalanceDateSet[today] = true
 			nextRebalancedDate = today.AddDate(0, 0, rebalancePeriod)
 		}
 
@@ -145,33 +150,61 @@ func (a *EtfBackTester) BackTest(printLog bool) {
 	}
 
 	a.PurchaseAmount = purchaseAmount
-	a.printResult(printLog)
+	a.printResult(printLog, accumulateDateSet, rebalanceDateSet)
 }
 
-func (a *EtfBackTester) printResult(printLog bool) {
+func (a *EtfBackTester) printResult(printLog bool, accumulateDateSet, rebalanceDateSet map[time.Time]bool) {
 
 	today := a.startDate
 	endDate := a.endDate
+	keys := make([]string, 0)
+
+	for k, _ := range a.DataMap {
+		keys = append(keys, k)
+	}
 
 	if printLog {
+
+		fmt.Print("Date,")
+
+		for _, k := range keys {
+			fmt.Print(k + ",")
+		}
+
+		fmt.Println()
+
 		for {
 			if today == endDate {
 				break
 			}
 
-			fmt.Println(today)
-			for k, v := range a.DataMap {
+			fmt.Print(today.String() + ",")
 
-				if v.DailyData[today].IsRebalancingDate {
-					fmt.Println("Rebalancing...")
-				}
+			appendix := ""
 
-				if v.DailyData[today].IsAccumulativeDate {
-					fmt.Println("Accumulating...")
-				}
+			for _, k := range keys {
+				individualData := a.DataMap[k]
+				changePercent := strconv.FormatFloat(individualData.DailyData[today].ChangePercent * individualData.MetaData.Leverage, 'f', 2, 64)
 
-				fmt.Print(k + ":" + strconv.FormatFloat(v.InvestAmount[today], 'f', 2, 64) + "|")
+				fmt.Print(strconv.FormatFloat(individualData.InvestAmount[today], 'f', 2, 64) + "("+ changePercent +"),")
 			}
+
+			if accumulateDateSet[today] {
+				appendix += "Accumulate"
+			}
+
+			if rebalanceDateSet[today] {
+				if appendix != "" {
+					appendix += "|"
+				}
+
+				appendix += "Rebalance"
+			}
+
+			fmt.Print(appendix)
+
+			today = today.AddDate(0, 0, 1)
+			fmt.Println()
 		}
 	}
 
@@ -182,8 +215,9 @@ func (a *EtfBackTester) printResult(printLog bool) {
 
 	totalReturnPercent := (totalAmount/a.PurchaseAmount)*100 - 100
 
-	fmt.Println("totalAmount: " + strconv.FormatFloat(totalAmount, 'f', 2, 64))
-	fmt.Println("totalReturnPercent: " + strconv.FormatFloat(totalReturnPercent, 'f', 2, 64) + "%")
+	fmt.Println("totalPurchaseAmount, " + strconv.FormatFloat(a.PurchaseAmount, 'f', 2, 64))
+	fmt.Println("totalAmount, " + strconv.FormatFloat(totalAmount, 'f', 2, 64))
+	fmt.Println("totalReturnPercent, " + strconv.FormatFloat(totalReturnPercent, 'f', 2, 64) + "%")
 }
 
 func applyDailyVariation(amount, percent, leverage float64) float64 {

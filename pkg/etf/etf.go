@@ -16,16 +16,6 @@ type DailyData struct {
 	LowPrice           float64
 	TradingVolume      string // 거래량
 	ChangePercent      float64
-	IsRebalancingDate  bool
-	IsAccumulativeDate bool
-}
-
-func (d DailyData) SetRebalancingDate(boolean bool) {
-	d.IsRebalancingDate = boolean
-}
-
-func (d DailyData) SetAccumulativeDate(boolean bool) {
-	d.IsAccumulativeDate = boolean
 }
 
 type ETF struct {

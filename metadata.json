@@ -1,7 +1,7 @@
 {
   "initialAmount": 10000,
-  "start": "1990-01-01",
-  "end": "2001-01-01",
+  "start": "2001-01-01",
+  "end": "2012-01-01",
   "rebalancePeriod": 365,
   "accumulative": true,
   "accumulateAmount": 100,
